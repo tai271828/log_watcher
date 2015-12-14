@@ -4,8 +4,11 @@
 Real-time log files watcher supporting log rotation.
 Works with Python >= 2.6 and >= 3.2, on both POSIX and Windows.
 
-Author: Giampaolo Rodola' <g.rodola [AT] gmail [DOT] com>
+Original Author: Giampaolo Rodola' <g.rodola [AT] gmail [DOT] com>
 License: MIT
+
+Modified by: Taihsiang Ho
+
 """
 
 import os
@@ -29,7 +32,9 @@ class LogWatcher(object):
     >>> lw.loop()
     """
 
-    def __init__(self, folder, callback, extensions=["log"], tail_lines=0,
+    def __init__(self, folder, callback,
+                       extensions=None , logfile=None,
+                       tail_lines=0,
                        sizehint=1048576):
         """Arguments:
 
@@ -44,6 +49,9 @@ class LogWatcher(object):
         (list) @extensions:
             only watch files with these extensions
 
+        (list) @logfile:
+            only watch this file. if this var exists, it will override extention list above.
+
         (int) @tail_lines:
             read last N lines from files being watched before starting
 
@@ -54,6 +62,7 @@ class LogWatcher(object):
         """
         self.folder = os.path.realpath(folder)
         self.extensions = extensions
+        self.logfile = logfile
         self._files_map = {}
         self._callback = callback
         self._sizehint = sizehint
@@ -108,10 +117,12 @@ class LogWatcher(object):
         """
         ls = os.listdir(self.folder)
         if self.extensions:
-            return [x for x in ls if os.path.splitext(x)[1][1:] \
+            ls = [x for x in ls if os.path.splitext(x)[1][1:] \
                                            in self.extensions]
-        else:
-            return ls
+        if self.logfile in ls:
+            ls = [self.logfile]
+
+        return ls
 
     @classmethod
     def open(cls, file):

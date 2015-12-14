@@ -45,7 +45,7 @@ def detect_str(line, str_2_detect):
     return False
 
 
-watcher = LogWatcher("../", callback, extensions=["plano_watcher"])
+watcher = LogWatcher("/var/log", callback, logfile="syslog")
 
 #while FLAG_WHILE_LOOP:
 watcher.loop()
