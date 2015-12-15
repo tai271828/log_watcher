@@ -16,12 +16,14 @@ import os
 import time
 import errno
 import stat
+import re
 
 FLAG_DETECTION_USB = False
 FLAG_DETECTION_INSERT = False
 FLAG_DETECTION_UHCI = False
 FLAG_DETECTION_XHCI = False
-FLAG_MOUNT_DEVICE = False
+FLAG_MOUNT_DEVICE_CANDIDATES = False
+FLAG_MOUNT_PARTITION = False
 #FLAG_WHILE_LOOP = True
 
 class LogWatcher(object):
@@ -257,122 +259,14 @@ class LogWatcher(object):
             file.close()
         self._files_map.clear()
 
-
-# ===================================================================
-# --- tests
-# ===================================================================
-
-if __name__ == '__main__':
-    import unittest
-    import atexit
-
-    TESTFN = '$testfile.log'
-    TESTFN2 = '$testfile2.log'
-    PY3 = sys.version_info[0] == 3
-
-    if PY3:
-        def b(s):
-            return s.encode("latin-1")
-    else:
-        def b(s):
-            return s
-
-    class TestLogWatcher(unittest.TestCase):
-
-        def setUp(self):
-            def callback(filename, lines):
-                self.filename.append(filename)
-                for line in lines:
-                    self.lines.append(line)
-
-            self.filename = []
-            self.lines = []
-            self.file = open(TESTFN, 'w')
-            self.watcher = LogWatcher(os.getcwd(), callback)
-
-        def tearDown(self):
-            self.watcher.close()
-            self.remove_test_files()
-
-        def write_file(self, data):
-            self.file.write(data)
-            self.file.flush()
-
-        @staticmethod
-        @atexit.register
-        def remove_test_files():
-            for x in [TESTFN, TESTFN2]:
-                try:
-                    os.remove(x)
-                except EnvironmentError:
-                    pass
-
-        def test_no_lines(self):
-            self.watcher.loop(blocking=False)
-
-        def test_one_line(self):
-            self.write_file('foo')
-            self.watcher.loop(blocking=False)
-            self.assertEqual(self.lines, [b"foo"])
-            self.assertEqual(self.filename, [os.path.abspath(TESTFN)])
-
-        def test_two_lines(self):
-            self.write_file('foo\n')
-            self.write_file('bar\n')
-            self.watcher.loop(blocking=False)
-            self.assertEqual(self.lines, [b"foo\n", b"bar\n"])
-            self.assertEqual(self.filename, [os.path.abspath(TESTFN)])
-
-        def test_new_file(self):
-            with open(TESTFN2, "w") as f:
-                f.write("foo")
-            self.watcher.loop(blocking=False)
-            self.assertEqual(self.lines, [b"foo"])
-            self.assertEqual(self.filename, [os.path.abspath(TESTFN2)])
-
-        def test_file_removed(self):
-            self.write_file("foo")
-            try:
-                os.remove(TESTFN)
-            except EnvironmentError:  # necessary on Windows
-                pass
-            self.watcher.loop(blocking=False)
-            self.assertEqual(self.lines, [b"foo"])
-
-        def test_tail(self):
-            MAX = 10000
-            content = '\n'.join([str(x) for x in range(0, MAX)])
-            self.write_file(content)
-            # input < BUFSIZ (1 iteration)
-            lines = self.watcher.tail(self.file.name, 100)
-            self.assertEqual(len(lines), 100)
-            self.assertEqual(lines, [b(str(x)) for x in range(MAX-100, MAX)])
-            # input > BUFSIZ (multiple iterations)
-            lines = self.watcher.tail(self.file.name, 5000)
-            self.assertEqual(len(lines), 5000)
-            self.assertEqual(lines, [b(str(x)) for x in range(MAX-5000, MAX)])
-            # input > file's total lines
-            lines = self.watcher.tail(self.file.name, MAX + 9999)
-            self.assertEqual(len(lines), MAX)
-            self.assertEqual(lines, [b(str(x)) for x in range(0, MAX)])
-            #
-            self.assertRaises(ValueError, self.watcher.tail, self.file.name, 0)
-            LogWatcher.tail(self.file.name, 10)
-
-        def test_ctx_manager(self):
-            with self.watcher:
-                pass
-
-
-    test_suite = unittest.TestSuite()
-    test_suite.addTest(unittest.makeSuite(TestLogWatcher))
-    unittest.TextTestRunner(verbosity=2).run(test_suite)
-
+######################################################
+# run the log watcher
+######################################################
 
 def callback(filename, lines):
     global FLAG_DETECTION_USB, FLAG_DETECTION_INSERT
     global FLAG_DETECTION_UHCI, FLAG_DETECTION_XHCI
-    global FLAG_MOUNT_DEVICE
+    global FLAG_MOUNT_PARTITION
     global FLAG_WHILE_LOOP
     for line in lines:
         line_str = str(line)
@@ -380,23 +274,53 @@ def callback(filename, lines):
         if detect_str(line_str, 'uhci'): FLAG_DETECTION_UHCI = True
         if detect_str(line_str, 'xhci'): FLAG_DETECTION_XHCI = True
         if detect_str(line_str, 'USB Mass Storage device detected'): FLAG_DETECTION_INSERT = True
-        if detect_str(line_str, 'sdb'): FLAG_MOUNT_DEVICE = "sdb"
-    if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_DETECTION_UHCI:
-        print("An USB mass storage was inserted in a uhci controller")
-        print("sdb")
-        # stop the watcher loop
-        #FLAG_WHILE_LOOP = False
-        sys.exit()
-    if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_DETECTION_XHCI:
-        print("An USB mass storage was inserted in a xhci controller")
-        # stop the watcher loop
-        #FLAG_WHILE_LOOP = False
-        sys.exit()
+        FLAG_MOUNT_DEVICE_CANDIDIATES = detect_partition(line_str)
+        if FLAG_MOUNT_DEVICE_CANDIDIATES and len(FLAG_MOUNT_DEVICE_CANDIDIATES) == 2:
+            # hard code because I expect
+            # FLAG_MOUNT_DEVICE_CANDIDIATES is something like ['sdb', ' sdb1']
+            # This should be smarter if the device has multiple partitions.
+            print(FLAG_MOUNT_DEVICE_CANDIDIATES)
+            FLAG_MOUNT_PARTITION = FLAG_MOUNT_DEVICE_CANDIDIATES[1].strip()
+    if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_MOUNT_PARTITION:
+        if FLAG_DETECTION_UHCI:
+            print("An USB mass storage was inserted in a uhci controller")
+            print(FLAG_MOUNT_PARTITION)
+            # stop the watcher loop
+            #FLAG_WHILE_LOOP = False
+            sys.exit()
+        if FLAG_DETECTION_XHCI:
+            print("An USB mass storage was inserted in a xhci controller")
+            print(FLAG_MOUNT_PARTITION)
+            # stop the watcher loop
+            #FLAG_WHILE_LOOP = False
+            sys.exit()
 
 def detect_str(line, str_2_detect):
     if str_2_detect in line:
         return True
     return False
+
+def detect_partition(line):
+    """ Arguments:
+
+    (str) @line:
+        line string from log file
+
+    return a list denoting [device, partition1, partition2 ...]
+    from syslog
+
+    """
+    # looking for string like
+    # sdb: sdb1
+    pattern = "sd.+sd.+"
+    match = re.search(pattern, line)
+    if match:
+        # remove the trailing \n and quote
+        match_string = match.group()[:-3]
+        # will looks like
+        # ['sdb', ' sdb1']
+        match_list = match_string.split(":")
+        return match_list
 
 
 watcher = LogWatcher("/var/log", callback, logfile="syslog")
