@@ -17,6 +17,9 @@ import time
 import errno
 import stat
 import re
+import signal
+
+USB_INSERT_TIMEOUT = 30 # sec
 
 FLAG_DETECTION_USB = False
 FLAG_DETECTION_INSERT = False
@@ -283,13 +286,15 @@ def callback(filename, lines):
     if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_MOUNT_PARTITION:
         if FLAG_DETECTION_UHCI:
             print("An USB mass storage was inserted in a uhci controller")
-            print(usable partition: FLAG_MOUNT_PARTITION)
+            print("usable partition: %s" % FLAG_MOUNT_PARTITION)
+            write_usb_info()
             # stop the watcher loop
             #FLAG_WHILE_LOOP = False
             sys.exit()
         if FLAG_DETECTION_XHCI:
             print("An USB mass storage was inserted in a xhci controller")
-            print(usable partition: FLAG_MOUNT_PARTITION)
+            print("usable partition: %s" % FLAG_MOUNT_PARTITION)
+            write_usb_info()
             # stop the watcher loop
             #FLAG_WHILE_LOOP = False
             sys.exit()
@@ -327,10 +332,19 @@ def write_usb_info():
     so the other jobs, e.g. read/write test, could know more information,
     for example the partition it want to try to mount.
     """
+    print(os.environ.get('PLAINBOX_SESSION_SHARE'))
 
-
+def no_usb_timeout(signum, frame):
+    """
+    timeout and return failure if there is no usb insertion is detected
+    after USB_INSERT_TIMEOUT secs
+    """
+    print("no USB storage insertion was detected from /var/log/syslog")
+    sys.exit(1)
 
 watcher = LogWatcher("/var/log", callback, logfile="syslog")
+signal.signal(signal.SIGALRM, no_usb_timeout)
+signal.alarm(USB_INSERT_TIMEOUT)
 
 #while FLAG_WHILE_LOOP:
 watcher.loop()
