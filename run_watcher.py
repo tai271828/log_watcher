@@ -279,18 +279,17 @@ def callback(filename, lines):
             # hard code because I expect
             # FLAG_MOUNT_DEVICE_CANDIDIATES is something like ['sdb', ' sdb1']
             # This should be smarter if the device has multiple partitions.
-            print(FLAG_MOUNT_DEVICE_CANDIDIATES)
             FLAG_MOUNT_PARTITION = FLAG_MOUNT_DEVICE_CANDIDIATES[1].strip()
     if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_MOUNT_PARTITION:
         if FLAG_DETECTION_UHCI:
             print("An USB mass storage was inserted in a uhci controller")
-            print(FLAG_MOUNT_PARTITION)
+            print(usable partition: FLAG_MOUNT_PARTITION)
             # stop the watcher loop
             #FLAG_WHILE_LOOP = False
             sys.exit()
         if FLAG_DETECTION_XHCI:
             print("An USB mass storage was inserted in a xhci controller")
-            print(FLAG_MOUNT_PARTITION)
+            print(usable partition: FLAG_MOUNT_PARTITION)
             # stop the watcher loop
             #FLAG_WHILE_LOOP = False
             sys.exit()
@@ -321,6 +320,14 @@ def detect_partition(line):
         # ['sdb', ' sdb1']
         match_list = match_string.split(":")
         return match_list
+
+def write_usb_info():
+    """
+    write the info we got in this script to $PLAINBOX_SESSION_SHARE
+    so the other jobs, e.g. read/write test, could know more information,
+    for example the partition it want to try to mount.
+    """
+
 
 
 watcher = LogWatcher("/var/log", callback, logfile="syslog")
