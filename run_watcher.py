@@ -18,6 +18,7 @@ import errno
 import stat
 import re
 import signal
+import posixpath
 
 USB_INSERT_TIMEOUT = 30 # sec
 
@@ -332,7 +333,13 @@ def write_usb_info():
     so the other jobs, e.g. read/write test, could know more information,
     for example the partition it want to try to mount.
     """
-    print(os.environ.get('PLAINBOX_SESSION_SHARE'))
+    plainbox_session_share = os.environ.get('PLAINBOX_SESSION_SHARE')
+    if FLAG_MOUNT_PARTITION:
+        print("cache file usb_insert_info is at: %s" % plainbox_session_share)
+        file_to_share = open(posixpath.join(plainbox_session_share, "usb_insert_info"), "w")
+        file_to_share.write(FLAG_MOUNT_PARTITION + "\n")
+        file_to_share.close()
+
 
 def no_usb_timeout(signum, frame):
     """
