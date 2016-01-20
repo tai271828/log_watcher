@@ -27,8 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
-
 import sys
 import os
 import time
@@ -38,15 +36,6 @@ import re
 import signal
 import posixpath
 
-USB_INSERT_TIMEOUT = 30 # sec
-
-FLAG_DETECTION_USB = False
-FLAG_DETECTION_INSERT = False
-FLAG_DETECTION_UHCI = False
-FLAG_DETECTION_XHCI = False
-FLAG_MOUNT_DEVICE_CANDIDATES = False
-FLAG_MOUNT_PARTITION = False
-#FLAG_WHILE_LOOP = True
 
 class LogWatcher(object):
     """Looks for changes in all files of a directory.
@@ -63,9 +52,9 @@ class LogWatcher(object):
     """
 
     def __init__(self, folder, callback,
-                       extensions=None , logfile=None,
-                       tail_lines=0,
-                       sizehint=1048576):
+                 extensions=None, logfile=None,
+                 tail_lines=0,
+                 sizehint=1048576):
         """Arguments:
 
         (str) @folder:
@@ -80,7 +69,8 @@ class LogWatcher(object):
             only watch files with these extensions
 
         (list) @logfile:
-            only watch this file. if this var exists, it will override extention list above.
+            only watch this file. if this var exists,
+            it will override extention list above.
 
         (int) @tail_lines:
             read last N lines from files being watched before starting
@@ -147,8 +137,8 @@ class LogWatcher(object):
         """
         ls = os.listdir(self.folder)
         if self.extensions:
-            ls = [x for x in ls if os.path.splitext(x)[1][1:] \
-                                           in self.extensions]
+            ls = [x for x in ls if os.path.splitext(x)[1][1:]
+                  in self.extensions]
         if self.logfile in ls:
             ls = [self.logfile]
 
@@ -281,95 +271,3 @@ class LogWatcher(object):
             file.close()
         self._files_map.clear()
 
-######################################################
-# run the log watcher
-######################################################
-
-def callback(filename, lines):
-    global FLAG_DETECTION_USB, FLAG_DETECTION_INSERT
-    global FLAG_DETECTION_UHCI, FLAG_DETECTION_XHCI
-    global FLAG_MOUNT_PARTITION
-    global FLAG_WHILE_LOOP
-    for line in lines:
-        line_str = str(line)
-        if detect_str(line_str, 'USB'): FLAG_DETECTION_USB = True
-        if detect_str(line_str, 'uhci'): FLAG_DETECTION_UHCI = True
-        if detect_str(line_str, 'xhci'): FLAG_DETECTION_XHCI = True
-        if detect_str(line_str, 'USB Mass Storage device detected'): FLAG_DETECTION_INSERT = True
-        FLAG_MOUNT_DEVICE_CANDIDIATES = detect_partition(line_str)
-        if FLAG_MOUNT_DEVICE_CANDIDIATES and len(FLAG_MOUNT_DEVICE_CANDIDIATES) == 2:
-            # hard code because I expect
-            # FLAG_MOUNT_DEVICE_CANDIDIATES is something like ['sdb', ' sdb1']
-            # This should be smarter if the device has multiple partitions.
-            FLAG_MOUNT_PARTITION = FLAG_MOUNT_DEVICE_CANDIDIATES[1].strip()
-    if FLAG_DETECTION_USB and FLAG_DETECTION_INSERT and FLAG_MOUNT_PARTITION:
-        if FLAG_DETECTION_UHCI:
-            print("An USB mass storage was inserted in a uhci controller")
-            print("usable partition: %s" % FLAG_MOUNT_PARTITION)
-            write_usb_info()
-            # stop the watcher loop
-            #FLAG_WHILE_LOOP = False
-            sys.exit()
-        if FLAG_DETECTION_XHCI:
-            print("An USB mass storage was inserted in a xhci controller")
-            print("usable partition: %s" % FLAG_MOUNT_PARTITION)
-            write_usb_info()
-            # stop the watcher loop
-            #FLAG_WHILE_LOOP = False
-            sys.exit()
-
-def detect_str(line, str_2_detect):
-    if str_2_detect in line:
-        return True
-    return False
-
-def detect_partition(line):
-    """ Arguments:
-
-    (str) @line:
-        line string from log file
-
-    return a list denoting [device, partition1, partition2 ...]
-    from syslog
-
-    """
-    # looking for string like
-    # sdb: sdb1
-    pattern = "sd.+sd.+"
-    match = re.search(pattern, line)
-    if match:
-        # remove the trailing \n and quote
-        match_string = match.group()[:-3]
-        # will looks like
-        # ['sdb', ' sdb1']
-        match_list = match_string.split(":")
-        return match_list
-
-def write_usb_info():
-    """
-    write the info we got in this script to $PLAINBOX_SESSION_SHARE
-    so the other jobs, e.g. read/write test, could know more information,
-    for example the partition it want to try to mount.
-    """
-    plainbox_session_share = os.environ.get('PLAINBOX_SESSION_SHARE')
-    if FLAG_MOUNT_PARTITION:
-        print("cache file usb_insert_info is at: %s" % plainbox_session_share)
-        file_to_share = open(posixpath.join(plainbox_session_share, "usb_insert_info"), "w")
-        file_to_share.write(FLAG_MOUNT_PARTITION + "\n")
-        file_to_share.close()
-
-
-def no_usb_timeout(signum, frame):
-    """
-    timeout and return failure if there is no usb insertion is detected
-    after USB_INSERT_TIMEOUT secs
-    """
-    print("no USB storage insertion was detected from /var/log/syslog")
-    sys.exit(1)
-
-watcher = LogWatcher("/var/log", callback, logfile="syslog")
-signal.signal(signal.SIGALRM, no_usb_timeout)
-signal.alarm(USB_INSERT_TIMEOUT)
-
-#while FLAG_WHILE_LOOP:
-watcher.loop()
