@@ -171,7 +171,7 @@ class LogWatcher(object):
         if window <= 0:
             raise ValueError('invalid window value %r' % window)
         with cls.open(fname) as f:
-            BUFSIZ = 1024
+            buffer_size = 1024
             # True if open() was overridden and file was opened in text
             # mode. In that case readlines() will return unicode strings
             # instead of bytes.
@@ -183,14 +183,14 @@ class LogWatcher(object):
             block = -1
             exit = False
             while not exit:
-                step = (block * BUFSIZ)
+                step = (block * buffer_size)
                 if abs(step) >= fsize:
                     f.seek(0)
-                    newdata = f.read(BUFSIZ - (abs(step) - fsize))
+                    newdata = f.read(buffer_size - (abs(step) - fsize))
                     exit = True
                 else:
                     f.seek(step, os.SEEK_END)
-                    newdata = f.read(BUFSIZ)
+                    newdata = f.read(buffer_size)
                 data = newdata + data
                 if data.count(CR) >= window:
                     break
