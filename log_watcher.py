@@ -57,25 +57,31 @@ class LogWatcher(object):
                  sizehint=1048576):
         """Arguments:
 
-        (str) @folder:
+        def __init__(self, folder: str, callback,
+                     extensions: 'List[str]'=None, logfile: 'List[str]=None,
+                     tail_lines: int,
+                     sizehint: int):
+
+        :param folder: str
             the folder to watch
 
-        (callable) @callback:
+        :param callback: callback
             a function which is called every time one of the file being
             watched is updated;
             this is called with "filename" and "lines" arguments.
 
-        (list) @extensions:
+        :param extensions: list
             only watch files with these extensions
 
-        (list) @logfile:
+        :param logfile: list
             only watch this file. if this var exists,
             it will override extention list above.
 
-        (int) @tail_lines:
+        :param tail_lines: int
             read last N lines from files being watched before starting
 
-        (int) @sizehint: passed to file.readlines(), represents an
+        :param sizehint: int
+            passed to file.readlines(), represents an
             approximation of the maximum number of bytes to read from
             a file on every ieration (as opposed to load the entire
             file in memory until EOF is reached). Defaults to 1MB.
